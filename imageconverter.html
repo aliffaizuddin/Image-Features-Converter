@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feature Tracker</title>
+    <style>
+        .canvas-container {
+            display: flex;
+            justify-content: space-between;
+        }
+        canvas {
+            border: 1px solid black;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Feature Tracker</h1>
+    <input type="file" accept="image/*" id="uploadInput">
+    <div class="canvas-container">
+        <canvas id="originalCanvas" width="400" height="300"></canvas>
+        <canvas id="grayscaleCanvas" width="400" height="300"></canvas>
+        <canvas id="cornersCanvas" width="400" height="300"></canvas>
+    </div>
+    <br>
+    <button id="generateGrayscaleButton">Generate Grayscale</button>
+    <button id="generateCornersButton">Generate Features</button>
+    <button id="downloadGrayscaleButton">Download Grayscale</button>
+    <button id="downloadButton">Download Files</button>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tracking.js/1.1.3/tracking.js"></script>
+    <script>
+        document.getElementById('uploadInput').addEventListener('change', function() {
+            const file = this.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const originalCanvas = document.getElementById('originalCanvas');
+                    const ctxOriginal = originalCanvas.getContext('2d');
+
+                    originalCanvas.width = img.width;
+                    originalCanvas.height = img.height;
+
+                    ctxOriginal.drawImage(img, 0, 0);
+                }
+                img.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        });
+
+        document.getElementById('generateGrayscaleButton').addEventListener('click', function() {
+            generateGrayscaleAndDownload();
+        });
+
+        document.getElementById('generateCornersButton').addEventListener('click', function() {
+            generateFeaturesAndDownload();
+        });
+
+        function generateGrayscaleAndDownload() {
+            const originalCanvas = document.getElementById('originalCanvas');
+            const grayscaleCanvas = document.getElementById('grayscaleCanvas');
+            const ctxOriginal = originalCanvas.getContext('2d');
+            const ctxGrayscale = grayscaleCanvas.getContext('2d');
+
+            grayscaleCanvas.width = originalCanvas.width;
+            grayscaleCanvas.height = originalCanvas.height;
+
+            ctxGrayscale.drawImage(originalCanvas, 0, 0);
+
+            const imageData = ctxGrayscale.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+            const pixels = new Uint8Array(imageData.data.buffer);
+
+            // Convert to grayscale and draw
+            const grayscalePixels = convertToGrayscale(pixels, originalCanvas.width, originalCanvas.height);
+            const grayscaleImageData = ctxGrayscale.createImageData(originalCanvas.width, originalCanvas.height);
+            for (let i = 0; i < grayscalePixels.length; i++) {
+                grayscaleImageData.data[i * 4] = grayscalePixels[i];
+                grayscaleImageData.data[i * 4 + 1] = grayscalePixels[i];
+                grayscaleImageData.data[i * 4 + 2] = grayscalePixels[i];
+                grayscaleImageData.data[i * 4 + 3] = 255; // Alpha channel
+            }
+            ctxGrayscale.putImageData(grayscaleImageData, 0, 0);
+
+            // Download grayscale image
+            const dataUrl = grayscaleCanvas.toDataURL('image/jpeg');
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = 'grayscale_image.jpg';
+            a.click();
+        }
+
+        function generateFeaturesAndDownload() {
+            const originalCanvas = document.getElementById('originalCanvas');
+            const grayscaleCanvas = document.getElementById('grayscaleCanvas');
+            const cornersCanvas = document.getElementById('cornersCanvas');
+
+            const ctxOriginal = originalCanvas.getContext('2d');
+            const ctxGrayscale = grayscaleCanvas.getContext('2d');
+            const ctxCorners = cornersCanvas.getContext('2d');
+
+            const imageData = ctxOriginal.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+            const pixels = new Uint8Array(imageData.data.buffer);
+
+            // Convert to grayscale and draw
+            const grayscalePixels = convertToGrayscale(pixels, originalCanvas.width, originalCanvas.height);
+            const grayscaleImageData = ctxGrayscale.createImageData(originalCanvas.width, originalCanvas.height);
+            for (let i = 0; i < grayscalePixels.length; i++) {
+                grayscaleImageData.data[i * 4] = grayscalePixels[i];
+                grayscaleImageData.data[i * 4 + 1] = grayscalePixels[i];
+                grayscaleImageData.data[i * 4 + 2] = grayscalePixels[i];
+                grayscaleImageData.data[i * 4 + 3] = 255; // Alpha channel
+            }
+            ctxGrayscale.putImageData(grayscaleImageData, 0, 0);
+
+            // Set dimensions of corners canvas
+            cornersCanvas.width = originalCanvas.width;
+            cornersCanvas.height = originalCanvas.height;
+
+            // Draw original image
+            ctxOriginal.drawImage(originalCanvas, 0, 0);
+
+            // Detect corners and draw
+            const corners = tracking.Fast.findCorners(grayscalePixels, originalCanvas.width, originalCanvas.height);
+            const cornerPixels = drawCorners(ctxCorners, corners, ctxGrayscale);
+            console.log(cornerPixels); // Log the corner pixels
+
+            // Generate fset, fset3, and iset
+            const fsetBlob = new Blob([JSON.stringify(cornerPixels)], { type: 'application/json' });
+            const fset3Blob = new Blob([JSON.stringify(cornerPixels)], { type: 'application/json' });
+            const isetBlob = new Blob([JSON.stringify(cornerPixels)], { type: 'application/json' });
+
+            // Create download links
+            const fsetLink = document.createElement('a');
+            fsetLink.href = URL.createObjectURL(fsetBlob);
+            fsetLink.download = 'cornered_image.fset';
+            const fset3Link = document.createElement('a');
+            fset3Link.href = URL.createObjectURL(fset3Blob);
+            fset3Link.download = 'cornered_image.fset3';
+            const isetLink = document.createElement('a');
+            isetLink.href = URL.createObjectURL(isetBlob);
+            isetLink.download = 'cornered_image.iset';
+
+            // Trigger download
+            fsetLink.click();
+            fset3Link.click();
+            isetLink.click();
+        }
+
+        function convertToGrayscale(pixels, width, height) {
+            const grayscalePixels = new Uint8Array(width * height);
+            for (let i = 0; i < pixels.length; i += 4) {
+                const r = pixels[i];
+                const g = pixels[i + 1];
+                const b = pixels[i + 2];
+                const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b; // Grayscale conversion formula
+                grayscalePixels[i / 4] = gray;
+            }
+            return grayscalePixels;
+        }
+
+        function drawCorners(ctx, corners, grayscaleCtx) {
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height); // Clear the canvas
+            ctx.drawImage(grayscaleCtx.canvas, 0, 0, ctx.canvas.width, ctx.canvas.height); // Draw grayscale image
+            ctx.fillStyle = 'red';
+            const cornerPixels = []; // Array to store pixel values
+            for (let i = 0; i < corners.length; i += 2) {
+                const x = corners[i];
+                const y = corners[i + 1];
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Get pixel value from grayscale image and store it
+                const pixelData = grayscaleCtx.getImageData(x, y, 1, 1).data;
+                const gray = (pixelData[0] + pixelData[1] + pixelData[2]) / 3; // Simple average for grayscale
+                cornerPixels.push(gray);
+            }
+            return cornerPixels; // Return the array of pixel values
+        }
+    </script>
+</body>
+</html>
